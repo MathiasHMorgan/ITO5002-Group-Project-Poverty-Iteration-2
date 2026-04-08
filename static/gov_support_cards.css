@@ -1,0 +1,68 @@
+
+
+.gov-support-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1rem;
+    margin: 0 0 1rem 0;
+}
+
+.gov-support-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    border: 1px solid;
+    border-radius: 0.5rem;
+    padding: 1rem 1.1rem;
+    min-width: 0;
+    border: 1px solid rgba(250, 250, 250, 0.2)
+}
+
+.gov-support-card-title {
+    margin: 0 0 0.35rem 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.gov-support-card-caption {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.gov-support-card-link {
+    display: block;
+    text-align: center;
+    margin-top: 0.75rem;
+    padding: 0.4rem 0.65rem;
+    border-radius: 0.35rem;
+    border: 1px solid;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: rgb(49, 51, 63);
+}
+
+.gov-support-card-link:hover {
+    border-color: #ff4b4b;
+    color: #ff4b4b;
+}
+
+@media (max-width: 1399px) {
+    .gov-support-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 899px) {
+    .gov-support-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 649px) {
+    .gov-support-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
