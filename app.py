@@ -203,7 +203,19 @@ def init_db():
 
 init_db()
 
+if "selected_types" not in st.session_state:
+    st.session_state["selected_types"] = []
+
 # ---------- Helpers ----------
+
+def toggle_type(service_type: str):
+    selected = st.session_state.get("selected_types", [])
+    if service_type in selected:
+        selected.remove(service_type)
+    else:
+        selected.append(service_type)
+    st.session_state["selected_types"] = selected
+
 def rate_limit():
     if "last_request" not in st.session_state:
         st.session_state.last_request = 0
@@ -716,14 +728,31 @@ def render_quick_actions():
     st.subheader("Quick Actions")
     qa1, qa2, qa3, qa4 = st.columns(4)
 
-    if qa1.button("Need food", use_container_width=True):
-        st.session_state["selected_type"] = "Food"
-    if qa2.button("Need shelter", use_container_width=True):
-        st.session_state["selected_type"] = "Shelter"
-    if qa3.button("Need Sanitation", use_container_width=True):
-        st.session_state["selected_type"] = "Sanitation"
-    if qa4.button("Need support", use_container_width=True):
-        st.session_state["selected_type"] = "Support Services"
+    selected = st.session_state.get("selected_types", [])
+
+    if qa1.button(
+        "Food" if "Food" in selected else "Need food",
+        use_container_width=True
+    ):
+        toggle_type("Food")
+
+    if qa2.button(
+        "Shelter" if "Shelter" in selected else "Need shelter",
+        use_container_width=True
+    ):
+        toggle_type("Shelter")
+
+    if qa3.button(
+        "Sanitation" if "Sanitation" in selected else "Need sanitation",
+        use_container_width=True
+    ):
+        toggle_type("Sanitation")
+
+    if qa4.button(
+        "Support Services" if "Support Services" in selected else "Need support",
+        use_container_width=True
+    ):
+        toggle_type("Support Services")
 
 
 def build_available_filters(
@@ -763,15 +792,18 @@ def render_sidebar(available_filters):
     with st.sidebar:
         st.header("Filters")
 
-        default_type = st.session_state.get("selected_type", available_filters[0])
-        if default_type not in available_filters:
-            default_type = available_filters[0]
+        current_selected = [
+            t for t in st.session_state.get("selected_types", [])
+            if t in available_filters
+        ]
 
-        selected_type = st.selectbox(
+        selected_types = st.multiselect(
             "Filter by service type",
             available_filters,
-            index=available_filters.index(default_type),
+            default=current_selected,
         )
+
+        st.session_state["selected_types"] = selected_types
 
         search_term = st.text_input(
             "Search within current filter",
@@ -795,11 +827,11 @@ def render_sidebar(available_filters):
         if st.button("Add food provider", use_container_width=True):
             food_offer_dialog()
 
-    return selected_type, search_term, show_only_phone, show_only_website, show_only_address
+    return selected_types, search_term, show_only_phone, show_only_website, show_only_address
 
 
 def build_filtered_df(
-    selected_type,
+    selected_types,
     osm_df,
     helping_out_food_df,
     custom_food_df,
@@ -808,31 +840,48 @@ def build_filtered_df(
     helping_out_support_df,
     helping_out_hygiene_df,
 ):
-    if selected_type == "Sanitation":
-        return pd.concat([sanitation_df, helping_out_hygiene_df], ignore_index=True)
+    if not selected_types:
+        selected_types = TYPE_ORDER.copy()
 
-    if selected_type == "Food":
+    frames = []
+
+    if "Food" in selected_types:
         osm_food_df = osm_df[osm_df["type"] == "Food"].copy() if "type" in osm_df.columns else pd.DataFrame()
-        return pd.concat([osm_food_df, helping_out_food_df, custom_food_df], ignore_index=True)
+        frames.extend([osm_food_df, helping_out_food_df, custom_food_df])
 
-    if selected_type == "Shelter":
+    if "Shelter" in selected_types:
         osm_shelter_df = osm_df[osm_df["type"] == "Shelter"].copy() if "type" in osm_df.columns else pd.DataFrame()
         if not osm_shelter_df.empty:
             osm_shelter_df = osm_shelter_df[
                 ~osm_shelter_df["name"].fillna("").str.lower().apply(lambda x: has_any_keyword(x, AGED_CARE_KEYWORDS))
             ].copy()
-        return pd.concat([osm_shelter_df, helping_out_shelter_df], ignore_index=True)
+        frames.extend([osm_shelter_df, helping_out_shelter_df])
 
-    if selected_type == "Support Services":
+    if "Support Services" in selected_types:
         if "type" in osm_df.columns:
             osm_support_df = osm_df[
                 osm_df["type"].isin(["Charity Organisation", "Religious / Community Support", "Women's Shelter"])
             ].copy()
         else:
             osm_support_df = pd.DataFrame()
-        return pd.concat([osm_support_df, helping_out_support_df], ignore_index=True)
+        frames.extend([osm_support_df, helping_out_support_df])
 
-    return osm_df[osm_df["type"] == selected_type].reset_index(drop=True) if "type" in osm_df.columns else pd.DataFrame()
+    if "Sanitation" in selected_types:
+        frames.extend([sanitation_df, helping_out_hygiene_df])
+
+    if "Youth Shelter" in selected_types and "type" in osm_df.columns:
+        frames.append(osm_df[osm_df["type"] == "Youth Shelter"].copy())
+
+    if "Charity Organisation" in selected_types and "type" in osm_df.columns:
+        frames.append(osm_df[osm_df["type"] == "Charity Organisation"].copy())
+
+    if "Religious / Community Support" in selected_types and "type" in osm_df.columns:
+        frames.append(osm_df[osm_df["type"] == "Religious / Community Support"].copy())
+
+    if not frames:
+        return pd.DataFrame(columns=["name", "type", "lat", "lon", "address", "phone", "website", "hours", "source", "notes"])
+
+    return pd.concat(frames, ignore_index=True)
 
 
 def render_metrics(df):
@@ -958,7 +1007,6 @@ def render_raw_table(df):
             hide_index=True,
         )
 
-
 # ---------- App ----------
 render_header()
 
@@ -986,10 +1034,10 @@ if not available_filters:
 
 render_quick_actions()
 
-selected_type, search_term, show_only_phone, show_only_website, show_only_address = render_sidebar(available_filters)
+selected_types, search_term, show_only_phone, show_only_website, show_only_address = render_sidebar(available_filters)
 
 filtered_df = build_filtered_df(
-    selected_type,
+    selected_types,
     osm_df,
     helping_out_food_df,
     custom_food_df,
@@ -1013,5 +1061,5 @@ if filtered_df.empty:
 
 st.write(f"Showing **{len(filtered_df)}** locations")
 render_map(filtered_df)
-render_results(filtered_df, selected_type)
+render_results(filtered_df, ", ".join(selected_types) if selected_types else "All Services")
 render_raw_table(filtered_df)
