@@ -8,6 +8,7 @@ import folium
 import pandas as pd
 import requests
 import streamlit as st
+import math
 from folium.plugins import MarkerCluster
 from streamlit_folium import st_folium
 from popup_utils import build_popup_html
@@ -228,6 +229,20 @@ if "selected_types" not in st.session_state:
 
 # ---------- Helpers ----------
 
+def haversine_km(lat1, lon1, lat2, lon2):
+    r = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return r * c
+
 def toggle_type(service_type: str):
     selected = st.session_state.get("selected_types", [])
     if service_type in selected:
@@ -246,23 +261,30 @@ def rate_limit():
     st.session_state.last_request = now
 
 def geocode_address(address: str):
+    address = address.strip()
+    if not address:
+        return None, None
+
     try:
         response = requests.get(
             "https://nominatim.openstreetmap.org/search",
             params={
-                "q": f"{address}, Melbourne, Victoria, Australia",
+                "q": address,
                 "format": "jsonv2",
                 "limit": 1,
                 "countrycodes": "au",
             },
-            timeout=20,
+            timeout=10,
             headers={"User-Agent": "Melbourne Support Finder"},
         )
         response.raise_for_status()
         results = response.json()
+
         if not results:
             return None, None
+
         return float(results[0]["lat"]), float(results[0]["lon"])
+
     except requests.exceptions.RequestException:
         return None, None
 
@@ -303,9 +325,6 @@ def classify_osm(tags):
         if "woman" in social_for or has_any_keyword(text, DV_KEYWORDS):
             return "Women's Shelter"
         return "Shelter"
-
-    if amenity == "library":
-        return "Phone Charging"
 
     if amenity == "library":
         return "Phone Charging"
@@ -392,6 +411,17 @@ def apply_detail_filters(df: pd.DataFrame, show_only_phone: bool, show_only_webs
     if show_only_address:
         df = df[df["address"] != "No address listed"]
     return df.reset_index(drop=True)
+
+def apply_nearest_filter(df: pd.DataFrame, user_lat, user_lon, nearest_count: int) -> pd.DataFrame:
+    if df.empty or user_lat is None or user_lon is None:
+        return df
+
+    df = df.copy()
+    df["distance_km"] = df.apply(
+        lambda row: haversine_km(user_lat, user_lon, row["lat"], row["lon"]),
+        axis=1
+    )
+    return df.sort_values("distance_km").head(nearest_count).reset_index(drop=True)
 
 
 def apply_search_filter(df: pd.DataFrame, search_term: str) -> pd.DataFrame:
@@ -867,7 +897,20 @@ def render_sidebar(available_filters):
         if st.button("Add food provider", use_container_width=True):
             food_offer_dialog()
 
-    return selected_types, search_term, show_only_phone, show_only_website, show_only_address
+        st.divider()
+        st.subheader("Find nearest results")
+        user_location = st.text_input(
+            "Enter your full location",
+            placeholder="e.g. 300 Lonsdale Street, Melbourne VIC 3000"
+        )
+
+        nearest_count = st.selectbox(
+            "Show nearest",
+            [5, 10, 15, 20],
+            index=1
+        )
+
+    return selected_types, search_term, show_only_phone, show_only_website, show_only_address, user_location, nearest_count
 
 
 def build_filtered_df(
@@ -935,9 +978,12 @@ def render_metrics(df):
     m4.metric("With address", int((df["address"] != "No address listed").sum()) if not df.empty else 0)
 
 
-def render_map(df):
+def render_map(df, user_lat=None, user_lon=None):
+    map_lat = user_lat if user_lat is not None else MELBOURNE_CBD_LAT
+    map_lon = user_lon if user_lon is not None else MELBOURNE_CBD_LON
+
     m = folium.Map(
-        location=[MELBOURNE_CBD_LAT, MELBOURNE_CBD_LON],
+        location=[map_lat, map_lon],
         zoom_start=MAP_DEFAULT_ZOOM,
     )
     cluster = MarkerCluster().add_to(m)
@@ -950,6 +996,14 @@ def render_map(df):
             tooltip=row["name"],
             icon=folium.Icon(color=color, icon=icon_name),
         ).add_to(cluster)
+
+    if user_lat is not None and user_lon is not None:
+        folium.Marker(
+            location=[user_lat, user_lon],
+            tooltip="You are here",
+            popup="You are here",
+            icon=folium.Icon(color="black", icon="user", prefix="fa"),
+        ).add_to(m)
 
     st_folium(m, width=None, height=720)
 
@@ -1077,7 +1131,18 @@ if not available_filters:
 
 render_quick_actions()
 
-selected_types, search_term, show_only_phone, show_only_website, show_only_address = render_sidebar(available_filters)
+selected_types, search_term, show_only_phone, show_only_website, show_only_address, user_location, nearest_count = render_sidebar(available_filters)
+
+user_lat = None
+user_lon = None
+
+if user_location.strip():
+    user_lat, user_lon = geocode_address(user_location.strip())
+
+    if user_lat is None or user_lon is None:
+        st.warning("Could not find that location. Please enter a full address, e.g. 300 Lonsdale Street, Melbourne VIC 3000.")
+    else:
+        st.caption(f"Using location: {user_lat:.6f}, {user_lon:.6f}")
 
 filtered_df = build_filtered_df(
     selected_types,
@@ -1092,9 +1157,12 @@ filtered_df = build_filtered_df(
 filtered_df = filtered_df[
     ~filtered_df["name"].fillna("").str.strip().str.lower().isin(["", "unknown"])
 ].reset_index(drop=True)
+
 filtered_df = apply_detail_filters(filtered_df, show_only_phone, show_only_website, show_only_address)
 filtered_df = dedupe_locations(filtered_df)
 filtered_df = apply_search_filter(filtered_df, search_term)
+filtered_df = apply_nearest_filter(filtered_df, user_lat, user_lon, nearest_count)
+
 
 render_metrics(filtered_df)
 
@@ -1103,6 +1171,6 @@ if filtered_df.empty:
     st.stop()
 
 st.write(f"Showing **{len(filtered_df)}** locations")
-render_map(filtered_df)
+render_map(filtered_df, user_lat, user_lon)
 render_results(filtered_df, ", ".join(selected_types) if selected_types else "All Services")
 render_raw_table(filtered_df)
