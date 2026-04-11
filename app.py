@@ -1,3 +1,4 @@
+# ---------- Libs ----------
 import html
 import sqlite3
 import time
@@ -9,7 +10,6 @@ import requests
 import streamlit as st
 from folium.plugins import MarkerCluster
 from streamlit_folium import st_folium
-
 from popup_utils import build_popup_html
 
 st.set_page_config(page_title="Melbourne Support Finder", layout="wide")
@@ -54,6 +54,12 @@ OSM_QUERY = f"""
 
   node["amenity"="social_facility"]["social_facility"="group_home"]{MELB_COORDS};
   way["amenity"="social_facility"]["social_facility"="group_home"]{MELB_COORDS};
+
+  node["amenity"="library"]{MELB_COORDS};
+  way["amenity"="library"]{MELB_COORDS};
+
+  node["railway"="station"]["name"~"^(Flinders Street|Southern Cross|Parliament|Melbourne Central|Flagstaff)$"]{MELB_COORDS};
+  way["railway"="station"]["name"~"^(Flinders Street|Southern Cross|Parliament|Melbourne Central|Flagstaff)$"]{MELB_COORDS};
 );
 out center;
 """
@@ -63,6 +69,7 @@ TYPE_ORDER = [
     "Shelter",
     "Youth Shelter",
     "Support Services",
+    "Phone Charging",
     "Charity Organisation",
     "Religious / Community Support",
     "Sanitation",
@@ -73,6 +80,7 @@ TYPE_TO_ICON = {
     "Shelter": ("red", "home"),
     "Youth Shelter": ("cadetblue", "home"),
     "Support Services": ("darkblue", "plus"),
+    "Phone Charging": ("lightgray", "flash"),
     "Charity Organisation": ("blue", "info-sign"),
     "Religious / Community Support": ("purple", "plus"),
     "Sanitation": ("orange", "tint"),
@@ -126,6 +134,18 @@ HELPING_OUT_SUPPORT_KEYWORDS = [
     "domestic violence", "women's support", "womens support",
     "counselling", "counseling", "mental health", "wellbeing",
     "support", "social work", "needle and syringe", "crisis"
+]
+
+PHONE_CHARGING_KEYWORDS = [
+    "library",
+    "libraries",
+    "telephone booth",
+    "public telephone",
+    "public phone",
+    "payphone",
+    "telstra payphone",
+    "train station",
+    "railway station",
 ]
 
 HELPING_OUT_SUPPORT_EXCLUDE = [
@@ -261,6 +281,7 @@ def classify_osm(tags):
     social = tags.get("social_facility", "")
     office = tags.get("office", "")
     amenity = tags.get("amenity", "")
+    railway = tags.get("railway", "")
     social_for = str(tags.get("social_facility:for", "")).lower()
 
     text = " ".join([
@@ -283,6 +304,25 @@ def classify_osm(tags):
             return "Women's Shelter"
         return "Shelter"
 
+    if amenity == "library":
+        return "Phone Charging"
+
+    if amenity == "library":
+        return "Phone Charging"
+
+    if railway == "station":
+        station_name = tags.get("name", "").strip()
+        cbd_major_stations = {
+            "Flinders Street",
+            "Southern Cross",
+            "Parliament",
+            "Melbourne Central",
+            "Flagstaff",
+        }
+        if station_name in cbd_major_stations:
+            return "Phone Charging"
+        return "Unknown"
+
     if office == "charity":
         if has_any_keyword(text, FOOD_KEYWORDS):
             return "Food"
@@ -291,15 +331,6 @@ def classify_osm(tags):
         if has_any_keyword(text, DV_KEYWORDS):
             return "Women's Shelter"
         return "Charity Organisation"
-
-    if amenity == "community_centre":
-        if has_any_keyword(text, FOOD_KEYWORDS):
-            return "Food"
-        if has_any_keyword(text, DRUG_ALCOHOL_KEYWORDS):
-            return "Support Services"
-        if has_any_keyword(text, DV_KEYWORDS):
-            return "Women's Shelter"
-        return "Unknown"
 
     if amenity == "place_of_worship":
         if has_any_keyword(text, FOOD_KEYWORDS):
@@ -726,7 +757,7 @@ def food_offer_dialog():
 
 def render_quick_actions():
     st.subheader("Quick Actions")
-    qa1, qa2, qa3, qa4 = st.columns(4)
+    qa1, qa2, qa3, qa4, qa5 = st.columns(5)
 
     selected = st.session_state.get("selected_types", [])
 
@@ -754,6 +785,12 @@ def render_quick_actions():
     ):
         toggle_type("Support Services")
 
+    if qa5.button(
+        "Phone Charging" if "Phone Charging" in selected else "Need charging",
+        use_container_width=True
+    ):
+        toggle_type("Phone Charging")
+
 
 def build_available_filters(
     osm_df,
@@ -780,6 +817,9 @@ def build_available_filters(
                 available.append(f)
         elif f == "Sanitation":
             if not sanitation_df.empty or not helping_out_hygiene_df.empty:
+                available.append(f)
+        elif f == "Phone Charging":
+            if "Phone Charging" in osm_types:
                 available.append(f)
         else:
             if f in osm_types:
@@ -868,6 +908,9 @@ def build_filtered_df(
 
     if "Sanitation" in selected_types:
         frames.extend([sanitation_df, helping_out_hygiene_df])
+
+    if "Phone Charging" in selected_types and "type" in osm_df.columns:
+        frames.append(osm_df[osm_df["type"] == "Phone Charging"].copy())
 
     if "Youth Shelter" in selected_types and "type" in osm_df.columns:
         frames.append(osm_df[osm_df["type"] == "Youth Shelter"].copy())
