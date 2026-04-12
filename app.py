@@ -2,6 +2,7 @@
 import html
 import sqlite3
 import time
+import re
 from datetime import datetime
 from pathlib import Path
 import folium
@@ -155,6 +156,15 @@ HELPING_OUT_SUPPORT_EXCLUDE = [
     "rough sleeping", "sleeping rough"
 ]
 
+GENERIC_NAMES = {
+    "test", "asdf", "hello", "unknown", "na", "n/a", "admin"
+    }
+
+SUSPICIOUS_PATTERNS = re.compile(
+    r"(http[s]?://|www\.|\.com|\.net|<|>|script|select |drop |insert )",
+    re.IGNORECASE
+)
+
 HYGIENE_KEYWORDS = [
     "shower", "showers", "laundry", "washing", "washing machine",
     "washer", "dryer", "clothes washing", "toiletries", "hygiene"
@@ -216,9 +226,22 @@ def init_db():
             notes TEXT,
             lat REAL NOT NULL,
             lon REAL NOT NULL,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            reviewed_at TEXT
         )
     """)
+    # Migrate existing DBs that lack the status and reviewed_at columns (additional food dialog security addition)
+    try:
+        cursor.execute("ALTER TABLE food_offers ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    try:
+        cursor.execute("ALTER TABLE food_offers ADD COLUMN reviewed_at TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     conn.commit()
     conn.close()
 
@@ -477,7 +500,7 @@ def normalise_helping_out_df(df: pd.DataFrame, out_type: str, notes: str) -> pd.
 @st.cache_data(ttl=30)
 def load_custom_food_offers():
     conn = get_connection()
-    df = pd.read_sql_query("SELECT * FROM food_offers", conn)
+    df = pd.read_sql_query("SELECT * FROM food_offers WHERE status = 'approved'", conn)
     conn.close()
 
     if df.empty:
@@ -755,10 +778,22 @@ def food_offer_dialog():
             if not address.strip():
                 st.warning("Address is required.")
                 return
+            
+            if name.strip().lower() in GENERIC_NAMES:
+                st.warning("Please enter a real organisation or venue name.")
+                return
+
+            if SUSPICIOUS_PATTERNS.search(name) or SUSPICIOUS_PATTERNS.search(notes):
+                st.warning("Your submission contains invalid characters or links. Please remove them.")
+                return
+            
+            if not notes.strip() or len(notes.strip()) < 20:
+                st.warning("Please describe the food support being offered (at least 20 characters).")
+                return
 
             lat, lon = geocode_address(address.strip())
             if lat is None or lon is None:
-                st.warning("Could not find that address on the map. Please check the address and try again.")
+                st.warning("Could not find that address on the map. Please check the address and try again. Only Melbourne addresses are accepted")
                 return
 
             conn = get_connection()
@@ -781,7 +816,7 @@ def food_offer_dialog():
 
             st.cache_data.clear()
             st.session_state["selected_type"] = "Food"
-            st.success("Food provider added.")
+            st.success("Thank you — your submission has been received and will appear on the map once reviewed, usually within 1-2 business days.")
             st.rerun()
 
 
