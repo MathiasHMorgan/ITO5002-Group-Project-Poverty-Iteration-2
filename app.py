@@ -924,7 +924,18 @@ def render_sidebar(available_filters):
         for t in available_filters:
             if t in TYPE_TO_ICON:
                 color, _ = marker_style(t)
-                st.markdown(f"- **{t}**: {color}")
+                safe_color = html.escape(color, quote=True)
+                safe_t = html.escape(t)
+                st.markdown(
+                    f'<p style="margin:0.2rem 0;">'
+                    f'<span style="display:inline-flex;align-items:center;gap:0.45rem;">'
+                    f'<span aria-hidden="true" style="display:inline-block;width:0.65rem;'
+                    f"height:0.65rem;border-radius:50%;background-color:{safe_color};"
+                    f'border:1px solid rgba(0,0,0,0.22);flex-shrink:0;"></span>'
+                    f"<strong>{safe_t}</strong>"
+                    f"</span></p>",
+                    unsafe_allow_html=True,
+                )
 
         st.divider()
         st.subheader("Offer food support")
