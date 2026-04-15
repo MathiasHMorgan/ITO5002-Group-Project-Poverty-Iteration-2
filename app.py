@@ -223,6 +223,7 @@ def init_db():
             address TEXT NOT NULL,
             phone TEXT,
             website TEXT,
+            abn TEXT,
             notes TEXT,
             lat REAL NOT NULL,
             lon REAL NOT NULL,
@@ -241,6 +242,11 @@ def init_db():
         cursor.execute("ALTER TABLE food_offers ADD COLUMN reviewed_at TEXT")
     except sqlite3.OperationalError:
         pass  # Column already exists
+
+    try:
+        cursor.execute("ALTER TABLE food_offers ADD COLUMN abn TEXT")
+    except sqlite3.OperationalError:
+        pass
 
     conn.commit()
     conn.close()
@@ -320,6 +326,18 @@ def address_from_tags(tags):
 
 def has_any_keyword(text: str, keywords: list[str]) -> bool:
     return any(k in text for k in keywords)
+
+
+def validate_abn_format(abn: str) -> bool:
+    """Check ABN is 11 digits and passes the official checksum algorithm"""
+    abn = re.sub(r"\s+", "", abn)
+    if not re.fullmatch(r"\d{11}", abn):
+        return False
+    weights = [10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19]
+    digits = [int(d) for d in abn]
+    digits[0] -= 1
+    total = sum(w * d for w, d in zip(weights, digits))
+    return total % 89 == 0
 
 
 def classify_osm(tags):
@@ -765,9 +783,10 @@ def food_offer_dialog():
     with st.form("food_offer_form"):
         st.write("Add a restaurant, uni café, or other place offering food support.")
         name = st.text_input("Organisation / venue name*")
-        address = st.text_input("Address*")
-        phone = st.text_input("Phone")
+        address = st.text_input("Address*", placeholder="e.g. 123 Fitzroy Street, Footscray")
+        phone = st.text_input("Phone", placeholder="e.g. 0412 345 678")
         website = st.text_input("Website")
+        abn = st.text_input("Australian Business Number (ABN)*", placeholder="e.g. 51 824 753 556")
         notes = st.text_area("Notes", placeholder="e.g. free meals after 5pm on weekdays")
 
         if st.form_submit_button("Submit"):
@@ -790,6 +809,14 @@ def food_offer_dialog():
             if not notes.strip() or len(notes.strip()) < 20:
                 st.warning("Please describe the food support being offered (at least 20 characters).")
                 return
+            
+            if not abn.strip():
+                st.warning("An ABN is required to register a food provider.")
+                return
+
+            if not validate_abn_format(abn.strip()):
+                st.warning("Please enter a valid 11-digit Australian ABN.")
+                return
 
             lat, lon = geocode_address(address.strip())
             if lat is None or lon is None:
@@ -799,13 +826,14 @@ def food_offer_dialog():
             conn = get_connection()
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO food_offers (name, address, phone, website, notes, lat, lon, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO food_offers (name, address, phone, website, notes, lat, lon, created_at, abn)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 name.strip(),
                 address.strip(),
                 phone.strip(),
                 website.strip(),
+                re.sub(r"\s+", "", abn.strip()),
                 notes.strip(),
                 lat,
                 lon,

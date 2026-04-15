@@ -1,0 +1,8 @@
+# See all pending with their ABNs
+sqlite3 community_food_support.db "SELECT id, name, abn, address, created_at FROM food_offers WHERE status='pending';"
+
+# Approve by ABN once document is verified
+sqlite3 community_food_support.db "UPDATE food_offers SET status='approved', reviewed_at=datetime('now') WHERE abn='51824753556';"
+
+# Reject
+sqlite3 community_food_support.db "UPDATE food_offers SET status='rejected', reviewed_at=datetime('now') WHERE abn='51824753556';"
