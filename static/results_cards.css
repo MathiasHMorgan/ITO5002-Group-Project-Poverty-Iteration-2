@@ -1,6 +1,6 @@
 .results-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 1rem;
     margin-top: 0.5rem;
 }
@@ -59,16 +59,4 @@
 
 .result-card-field a {
     word-break: break-word;
-}
-
-@media (max-width: 899px) {
-    .results-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 649px) {
-    .results-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
 }

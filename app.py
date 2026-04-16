@@ -11,6 +11,7 @@ import requests
 import streamlit as st
 import math
 from folium.plugins import MarkerCluster
+from folium.plugins import BeautifyIcon
 from streamlit_folium import st_folium
 from popup_utils import build_popup_html
 
@@ -742,13 +743,38 @@ def load_sanitation_data():
 def render_header():
     st.markdown(
         """
-        <h1 style="text-align: center; font-size: 3.2rem; margin-bottom: 0.2rem;">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap');
+
+.app-title {
+  font-family: "Poppins", "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+.app-subtitle {
+  font-family: "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  letter-spacing: -0.01em;
+}
+</style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <h1 class="app-title" style="text-align: center; font-size: 3.1rem; font-weight: 700; margin-bottom: 0.15rem;">
             Melbourne Support Finder
         </h1>
         """,
         unsafe_allow_html=True
     )
-    st.markdown("## Victorian Government support services")
+    st.markdown(
+        """
+<h2 class="app-subtitle" style="text-align:center; font-size: 1.35rem; font-weight: 600; margin-top: 0; margin-bottom: 0.85rem;">
+  Victorian Government support services
+</h2>
+        """,
+        unsafe_allow_html=True,
+    )
 
     card_blocks = []
     for card in GOV_SUPPORT_CARDS:
@@ -774,6 +800,16 @@ def render_header():
         '<div class="gov-support-grid">\n'
         + cards_inner
         + "\n</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.divider()
+    st.markdown(
+        """
+<h2 class="app-title" style="text-align:center; font-size: 1.6rem; font-weight: 700; margin: 0.15rem 0 0.35rem 0;">
+  Interactive Map
+</h2>
+        """,
         unsafe_allow_html=True,
     )
 
@@ -948,20 +984,60 @@ def render_sidebar(available_filters):
         show_only_address = st.checkbox("Only show places with address", value=False)
 
         st.divider()
-        st.caption("Marker colours")
+        st.caption("Map Legend")
+        st.markdown(
+            """
+<style>
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css');
+.marker-legend-row { margin: 0.2rem 0; }
+.marker-legend-wrap { display: inline-flex; align-items: center; gap: 0.55rem; }
+.marker-legend-badge {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(0, 0, 0, 0.22);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  flex-shrink: 0;
+}
+.marker-legend-badge i {
+  font-size: 0.85rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 1px rgba(0,0,0,0.35);
+}
+</style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        fa_icon_map = {
+            "cutlery": "fa-solid fa-utensils",
+            "home": "fa-solid fa-house",
+            "plus": "fa-solid fa-plus",
+            "flash": "fa-solid fa-bolt",
+            "info-sign": "fa-solid fa-circle-info",
+            "tint": "fa-solid fa-circle-info",
+            "star": "fa-solid fa-star",
+        }
+
         for t in available_filters:
             if t in TYPE_TO_ICON:
-                color, _ = marker_style(t)
+                color, icon_name = marker_style(t)
                 safe_color = html.escape(color, quote=True)
                 safe_t = html.escape(t)
+                fa_class = html.escape(fa_icon_map.get(icon_name, "fa-solid fa-location-dot"), quote=True)
                 st.markdown(
-                    f'<p style="margin:0.2rem 0;">'
-                    f'<span style="display:inline-flex;align-items:center;gap:0.45rem;">'
-                    f'<span aria-hidden="true" style="display:inline-block;width:0.65rem;'
-                    f"height:0.65rem;border-radius:50%;background-color:{safe_color};"
-                    f'border:1px solid rgba(0,0,0,0.22);flex-shrink:0;"></span>'
-                    f"<strong>{safe_t}</strong>"
-                    f"</span></p>",
+                    f'<div class="marker-legend-row">'
+                    f'  <span class="marker-legend-wrap">'
+                    f'    <span class="marker-legend-badge" style="background:{safe_color};" aria-hidden="true">'
+                    f'      <i class="{fa_class}"></i>'
+                    f"    </span>"
+                    f"    <strong>{safe_t}</strong>"
+                    f"  </span>"
+                    f"</div>",
                     unsafe_allow_html=True,
                 )
 
@@ -1062,21 +1138,52 @@ def render_map(df, user_lat=None, user_lon=None):
     )
     cluster = MarkerCluster().add_to(m)
 
-    for _, row in df.iterrows():
+    nearest_mode = (user_lat is not None and user_lon is not None and "distance_km" in df.columns)
+
+    for idx, (_, row) in enumerate(df.iterrows()):
         color, icon_name = marker_style_for_row(row)
+        tooltip = row["name"]
+        icon = folium.Icon(color=color, icon=icon_name)
+
+        if nearest_mode:
+            rank = idx + 1
+            tooltip = f"#{rank} · {row['name']} ({row['distance_km']:.1f} km)"
+            icon = BeautifyIcon(
+                icon_shape="marker",
+                number=str(rank),
+                background_color=str(color),
+                border_color="rgba(0,0,0,0.35)",
+                text_color="white",
+            )
+
         folium.Marker(
             location=[row["lat"], row["lon"]],
             popup=folium.Popup(build_popup_html(row), max_width=320),
-            tooltip=row["name"],
-            icon=folium.Icon(color=color, icon=icon_name),
+            tooltip=tooltip,
+            icon=icon,
         ).add_to(cluster)
 
     if user_lat is not None and user_lon is not None:
-        folium.Marker(
+        # A clearer "you are here" marker (ring + solid centre).
+        folium.CircleMarker(
             location=[user_lat, user_lon],
+            radius=18,
+            color="#2563eb",
+            weight=2,
+            fill=True,
+            fill_color="#2563eb",
+            fill_opacity=0.12,
             tooltip="You are here",
-            popup="You are here",
-            icon=folium.Icon(color="black", icon="user", prefix="fa"),
+        ).add_to(m)
+        folium.CircleMarker(
+            location=[user_lat, user_lon],
+            radius=7,
+            color="#111827",
+            weight=2,
+            fill=True,
+            fill_color="#3b82f6",
+            fill_opacity=1.0,
+            tooltip="You are here",
         ).add_to(m)
 
     st_folium(m, width=None, height=720)
