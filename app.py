@@ -841,7 +841,7 @@ def render_header():
         """
     <div class="intro-guide-wrap">
     <div class="intro-guide-box">
-        <h3 class="intro-guide-title">Welcome to Melbourne Support Finder</h3>
+        <h3 class="intro-guide-title">How can we help you?</h3>
         <div class="intro-guide-grid">
         <div class="intro-guide-item">
             <h4>What does this solution do?</h4>
