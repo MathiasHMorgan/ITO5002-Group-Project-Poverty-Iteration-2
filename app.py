@@ -755,21 +755,120 @@ def render_header():
   font-family: "Source Sans 3", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   letter-spacing: -0.01em;
 }
+
+.intro-guide-wrap {
+  margin: 0.75rem 0 1rem 0;
+}
+
+.intro-guide-box {
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 1.1rem 1.2rem;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(120, 120, 130, 0.22);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.08) inset,
+      0 6px 28px rgba(0, 0, 0, 0.14),
+      0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.intro-guide-title {
+  margin: 0 0 0.65rem 0;
+  font-family: "Poppins", "Source Sans 3", system-ui, sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.intro-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.9rem;
+}
+
+.intro-guide-item {
+  min-width: 0;
+}
+
+.intro-guide-item h4 {
+  margin: 0 0 0.3rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.intro-guide-item p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .intro-guide-box {
+    padding: 0.95rem 0.9rem;
+  }
+
+  .intro-guide-title {
+    font-size: 1.08rem;
+  }
+
+  .intro-guide-item h4 {
+    font-size: 0.96rem;
+  }
+
+  .intro-guide-item p {
+    font-size: 0.92rem;
+  }
+}
 </style>
         """,
         unsafe_allow_html=True,
     )
+
     st.markdown(
         """
-        <h1 class="app-title" style="text-align: center; font-size: 3.1rem; font-weight: 700; margin-bottom: 0.15rem;">
+        <h1 class="app-title" style="text-align: center; font-size: 3.1rem; font-weight: 700; margin-bottom: 0.2rem;">
             Melbourne Support Finder
         </h1>
         """,
         unsafe_allow_html=True
     )
+
     st.markdown(
         """
-<h2 class="app-subtitle" style="text-align:center; font-size: 1.35rem; font-weight: 600; margin-top: 0; margin-bottom: 0.85rem;">
+    <div class="intro-guide-wrap">
+    <div class="intro-guide-box">
+        <h3 class="intro-guide-title">Welcome to Melbourne Support Finder</h3>
+        <div class="intro-guide-grid">
+        <div class="intro-guide-item">
+            <h4>What does this solution do?</h4>
+            <p>Melbourne Support Finder brings together essential support locations across Melbourne in one place, helping people quickly find food, shelter, sanitation, support services, and phone charging.</p>
+        </div>
+        <div class="intro-guide-item">
+            <h4>Who is it for?</h4>
+            <p>This tool is designed for people experiencing hardship, crisis, or housing insecurity, as well as community members, support workers, and service providers helping others access urgent support.</p>
+        </div>
+        <div class="intro-guide-item">
+            <h4>What problem are we solving?</h4>
+            <p>When someone needs help, support information is often scattered across websites and hard to navigate. This app makes it easier to find nearby services quickly and clearly in one place.</p>
+        </div>
+        <div class="intro-guide-item">
+            <h4>How do you use the site?</h4>
+            <p>Use the quick action buttons or sidebar filters to choose the type of support you need, explore the map, search for a service, and enter your location to find the nearest results and navigate to points of interest.</p>
+        </div>
+        </div>
+    </div>
+    </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        """
+<h2 class="app-subtitle" style="text-align:center; font-size: 1.2rem; font-weight: 600; margin-top: 0; margin-bottom: 0.85rem;">
   Victorian Government support services
 </h2>
         """,
@@ -783,7 +882,7 @@ def render_header():
         button = html.escape(card["button"])
         url = html.escape(card["url"], quote=True)
         emoji = card["emoji"]
-        # No leading indentation on HTML lines — Streamlit markdown treats 4+ space indents as code fences.
+
         card_blocks.append(
             f'<div class="gov-support-card">'
             f'<h3 class="gov-support-card-title">{emoji} {title}</h3>'
@@ -791,19 +890,22 @@ def render_header():
             f'<a class="gov-support-card-link" href="{url}" target="_blank" rel="noopener noreferrer">{button}</a>'
             f"</div>"
         )
+
     cards_inner = "\n".join(card_blocks)
     gov_support_css = GOV_SUPPORT_CARDS_CSS_PATH.read_text(encoding="utf-8")
+
     st.markdown(
         "<style>\n"
         + gov_support_css
         + "\n</style>\n"
-        '<div class="gov-support-grid">\n'
+        + '<div class="gov-support-grid">\n'
         + cards_inner
         + "\n</div>",
         unsafe_allow_html=True,
     )
 
     st.divider()
+
     st.markdown(
         """
 <h2 class="app-title" style="text-align:center; font-size: 1.6rem; font-weight: 700; margin: 0.15rem 0 0.35rem 0;">
@@ -833,7 +935,7 @@ def food_offer_dialog():
             if not address.strip():
                 st.warning("Address is required.")
                 return
-            
+
             if name.strip().lower() in GENERIC_NAMES:
                 st.warning("Please enter a real organisation or venue name.")
                 return
@@ -841,11 +943,11 @@ def food_offer_dialog():
             if SUSPICIOUS_PATTERNS.search(name) or SUSPICIOUS_PATTERNS.search(notes):
                 st.warning("Your submission contains invalid characters or links. Please remove them.")
                 return
-            
+
             if not notes.strip() or len(notes.strip()) < 20:
                 st.warning("Please describe the food support being offered (at least 20 characters).")
                 return
-            
+
             if not abn.strip():
                 st.warning("An ABN is required to register a food provider.")
                 return
