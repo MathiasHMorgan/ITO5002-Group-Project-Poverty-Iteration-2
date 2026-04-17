@@ -14,6 +14,7 @@ from folium.plugins import MarkerCluster
 from folium.plugins import BeautifyIcon
 from streamlit_folium import st_folium
 from popup_utils import build_popup_html
+import urllib.parse
 
 st.set_page_config(page_title="Melbourne Support Finder", layout="wide")
 
@@ -1162,7 +1163,33 @@ def render_sidebar(available_filters):
             index=1
         )
 
-    return selected_types, search_term, show_only_phone, show_only_website, show_only_address, user_location, nearest_count
+        st.divider()
+        st.subheader("Get Directions")
+
+        directions_origin = st.text_input(
+            "Your current location (for directions)",
+            value=user_location,
+            placeholder="e.g. 300 Lonsdale Street, Melbourne VIC 3000"
+        )
+
+        directions_destination = st.text_input(
+            "Enter destination",
+            placeholder="e.g. Salvation Army Melbourne"
+        )
+
+        get_directions_clicked = st.button("Get Directions", use_container_width=True)
+
+        error = st.session_state.get("directions_error")
+        maps_url = st.session_state.get("maps_url")
+
+        if error == "origin":
+            st.warning("Please enter your current location for directions.")
+        elif error == "destination":
+            st.warning("Please enter a destination.")
+        elif maps_url:
+            st.link_button("Open in Google Maps", maps_url, use_container_width=True)
+
+    return selected_types, search_term, show_only_phone, show_only_website, show_only_address, user_location, nearest_count, directions_origin, directions_destination, get_directions_clicked
 
 
 def build_filtered_df(
@@ -1414,7 +1441,7 @@ if not available_filters:
 
 render_quick_actions()
 
-selected_types, search_term, show_only_phone, show_only_website, show_only_address, user_location, nearest_count = render_sidebar(available_filters)
+selected_types, search_term, show_only_phone, show_only_website, show_only_address, user_location, nearest_count, directions_origin, directions_destination, get_directions_clicked  = render_sidebar(available_filters)
 
 user_lat = None
 user_lon = None
@@ -1426,6 +1453,28 @@ if user_location.strip():
         st.warning("Could not find that location. Please enter a full address, e.g. 300 Lonsdale Street, Melbourne VIC 3000.")
     else:
         st.caption(f"Using location: {user_lat:.6f}, {user_lon:.6f}")
+
+# Directions Logic
+if get_directions_clicked:
+    if not directions_origin.strip():
+        st.session_state["directions_error"] = "origin"
+        st.session_state["maps_url"] = None
+    elif not directions_destination.strip():
+        st.session_state["directions_error"] = "destination"
+        st.session_state["maps_url"] = None
+    else:
+        origin_encoded = urllib.parse.quote(directions_origin.strip())
+        destination_encoded = urllib.parse.quote(directions_destination.strip())
+
+        st.session_state["maps_url"] = (
+            f"https://www.google.com/maps/dir/?api=1"
+            f"&origin={origin_encoded}"
+            f"&destination={destination_encoded}"
+            f"&travelmode=walking"
+        )
+        st.session_state["directions_error"] = None
+
+    st.rerun()
 
 filtered_df = build_filtered_df(
     selected_types,
