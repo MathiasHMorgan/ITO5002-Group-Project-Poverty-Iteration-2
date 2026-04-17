@@ -291,33 +291,44 @@ def rate_limit():
         st.stop()
     st.session_state.last_request = now
 
+@st.cache_data(ttl=3600)
 def geocode_address(address: str):
     address = address.strip()
     if not address:
         return None, None
 
-    try:
-        response = requests.get(
-            "https://nominatim.openstreetmap.org/search",
-            params={
-                "q": address,
-                "format": "jsonv2",
-                "limit": 1,
-                "countrycodes": "au",
-            },
-            timeout=10,
-            headers={"User-Agent": "Melbourne Support Finder"},
-        )
-        response.raise_for_status()
-        results = response.json()
+    queries = [
+        address,
+        f"{address}, Melbourne VIC",
+        f"{address}, Melbourne VIC 3000",
+        f"{address}, Melbourne, Victoria, Australia",
+    ]
 
-        if not results:
-            return None, None
+    headers = {"User-Agent": "Melbourne Support Finder"}
 
-        return float(results[0]["lat"]), float(results[0]["lon"])
+    for query in queries:
+        try:
+            response = requests.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q": query,
+                    "format": "jsonv2",
+                    "limit": 1,
+                    "countrycodes": "au",
+                },
+                timeout=15,
+                headers=headers,
+            )
+            response.raise_for_status()
+            results = response.json()
 
-    except requests.exceptions.RequestException:
-        return None, None
+            if results:
+                return float(results[0]["lat"]), float(results[0]["lon"])
+
+        except requests.exceptions.RequestException:
+            continue
+
+    return None, None
 
 
 def address_from_tags(tags):
